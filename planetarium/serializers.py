@@ -3,7 +3,7 @@ from pip._vendor.rich.markup import Tag
 from rest_framework import serializers
 from rest_framework.exceptions import ValidationError
 
-from planetarium.models import ShowTheme, PlanetariumDome, AstronomyShow
+from planetarium.models import ShowTheme, PlanetariumDome, AstronomyShow, ShowSession, Ticket
 
 
 class ShowThemeSerializer(serializers.ModelSerializer):
@@ -27,7 +27,7 @@ class AstronomyShowSerializer(serializers.ModelSerializer):
         fields = ("id", "title", "description", "show_themes")
 
 
-class AstronomyShowListSerializer(serializers.ModelSerializer):
+class AstronomyShowListSerializer(AstronomyShowSerializer):
     show_themes = serializers.SlugRelatedField(many=True,
                                                slug_field="name",
                                                read_only=True)
@@ -36,3 +36,63 @@ class AstronomyShowListSerializer(serializers.ModelSerializer):
         model = AstronomyShow
         fields = ("id", "title", "description", "show_themes")
 
+
+class AstronomyShowDetailSerializer(AstronomyShowSerializer):
+    show_themes = ShowThemeSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = AstronomyShow
+        fields = ("id", "title", "description", "show_themes")
+
+
+class ShowSessionSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ShowSession
+        fields = ("id", "astronomy_show", "planetarium_dome", "show_time")
+
+
+class ShowSessionListSerializer(ShowSessionSerializer):
+    astronomy_show_title = serializers.CharField(source="astronomy_show.title", read_only=True)
+    planetarium_dome_name = serializers.CharField(source="planetarium_dome.name", read_only=True)
+    planetarium_dome_capacity = serializers.IntegerField(source="planetarium_dome.capacity", read_only=True)
+
+    class Meta:
+        model = ShowSession
+        fields = ("id", "astronomy_show_title",
+                  "planetarium_dome_name", "planetarium_dome_capacity", "show_time")
+
+
+class TicketSerializer(serializers.ModelSerializer):
+    def validate(self, attrs):
+        data = super(TicketSerializer, self).validate(attrs=attrs)
+        Ticket.validate_ticket(
+            attrs["row"],
+            attrs["seat"],
+            attrs["show_session"].planetarium_dome,
+            ValidationError,
+        )
+        return data
+
+    class Meta:
+        model = Ticket
+        fields = ("id", "row", "seat", "show_session")
+
+
+class TicketListSerializer(TicketSerializer):
+    show_session = ShowSessionSerializer(many=False, read_only=True)
+
+
+class TicketSeatSerializer(TicketSerializer):
+    class Meta:
+        model = Ticket
+        fields = ("row", "seat")
+
+
+class ShowSessionDetailSerializer(ShowSessionSerializer):
+    astronomy_show = AstronomyShowSerializer(many=False, read_only=True)
+    planetarium_dome = PlanetariumDomeSerializer(many=False, read_only=True)
+    taken_places = TicketSeatSerializer(source="tickets", many=True, read_only=True)
+
+    class Meta:
+        model = ShowSession
+        fields = ("id", "show_time", "astronomy_show", "planetarium_dome", "taken_places")

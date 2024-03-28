@@ -1,9 +1,14 @@
+from datetime import datetime
+
+from django.db.models import F, Count
 from django.shortcuts import render
 from pip._vendor.rich.theme import Theme
 from rest_framework import viewsets
 
-from planetarium.models import ShowTheme, PlanetariumDome, AstronomyShow
-from planetarium.serializers import ShowThemeSerializer, PlanetariumDomeSerializer, AstronomyShowSerializer
+from planetarium.models import ShowTheme, PlanetariumDome, AstronomyShow, ShowSession
+from planetarium.serializers import ShowThemeSerializer, PlanetariumDomeSerializer, AstronomyShowSerializer, \
+    AstronomyShowListSerializer, AstronomyShowDetailSerializer, ShowSessionSerializer, ShowSessionListSerializer, \
+    ShowSessionDetailSerializer
 
 
 class ShowThemeViewSet(viewsets.ModelViewSet):
@@ -17,5 +22,78 @@ class PlanetariumDomeViewSet(viewsets.ModelViewSet):
 
 
 class AstronomyShowViewSet(viewsets.ModelViewSet):
-    queryset = AstronomyShow.objects.all()
+    queryset = AstronomyShow.objects.prefetch_related("show_themes")
     serializer_class = AstronomyShowSerializer
+    # permission_classes = (IsAdminOrIfAuthenticatedReadOnly,)
+
+    @staticmethod
+    def _params_to_ints(qs):
+        """Converts a list of string IDs to a list of integers"""
+        return [int(str_id) for str_id in qs.split(",")]
+
+    def get_queryset(self):
+        """Retrieve the shows with filters"""
+        title = self.request.query_params.get("title")
+        show_themes = self.request.query_params.get("show_themes")
+
+        queryset = self.queryset
+
+        if title:
+            queryset = queryset.filter(title__icontains=title)
+
+        if show_themes:
+            show_themes_ids = self._params_to_ints(show_themes)
+            queryset = queryset.filter(show_themes__id__in=show_themes_ids)
+
+        return queryset.distinct()
+
+    def get_serializer_class(self):
+        if self.action == "list":
+            return AstronomyShowListSerializer
+
+        if self.action == "retrieve":
+            return AstronomyShowDetailSerializer
+
+        # if self.action == "upload_image":
+        #     return MovieImageSerializer
+
+        return AstronomyShowSerializer
+
+
+class ShowSessionViewSet(viewsets.ModelViewSet):
+    queryset = (
+        ShowSession.objects.all()
+        .select_related("astronomy_show", "planetarium_dome")
+        .annotate(
+            tickets_available=(
+                    F("planetarium_dome__rows") * F("planetarium_dome__seats_in_row")
+                    - Count("tickets")
+            )
+        )
+    )
+    serializer_class = ShowSessionSerializer
+    # permission_classes = (IsAdminOrIfAuthenticatedReadOnly,)
+
+    def get_queryset(self):
+        date = self.request.query_params.get("date")
+        astronomy_show_id_str = self.request.query_params.get("astronomy_show")
+
+        queryset = self.queryset
+
+        if date:
+            date = datetime.strptime(date, "%Y-%m-%d").date()
+            queryset = queryset.filter(show_time__date=date)
+
+        if astronomy_show_id_str:
+            queryset = queryset.filter(astronomy_show_id=int(astronomy_show_id_str))
+
+        return queryset
+
+    def get_serializer_class(self):
+        if self.action == "list":
+            return ShowSessionListSerializer
+
+        if self.action == "retrieve":
+            return ShowSessionDetailSerializer
+
+        return ShowSessionSerializer
