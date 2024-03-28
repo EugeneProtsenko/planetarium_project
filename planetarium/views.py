@@ -5,10 +5,10 @@ from django.shortcuts import render
 from pip._vendor.rich.theme import Theme
 from rest_framework import viewsets
 
-from planetarium.models import ShowTheme, PlanetariumDome, AstronomyShow, ShowSession
+from planetarium.models import ShowTheme, PlanetariumDome, AstronomyShow, ShowSession, Reservation
 from planetarium.serializers import ShowThemeSerializer, PlanetariumDomeSerializer, AstronomyShowSerializer, \
     AstronomyShowListSerializer, AstronomyShowDetailSerializer, ShowSessionSerializer, ShowSessionListSerializer, \
-    ShowSessionDetailSerializer
+    ShowSessionDetailSerializer, ReservationSerializer, ReservationListSerializer
 
 
 class ShowThemeViewSet(viewsets.ModelViewSet):
@@ -97,3 +97,24 @@ class ShowSessionViewSet(viewsets.ModelViewSet):
             return ShowSessionDetailSerializer
 
         return ShowSessionSerializer
+
+
+class ReservationViewSet(viewsets.ModelViewSet):
+    queryset = Reservation.objects.prefetch_related(
+        "tickets__show_session__astronomy_show", "tickets__show_session__planetarium_dome"
+    )
+    serializer_class = ReservationSerializer
+    # pagination_class = OrderPagination
+    # permission_classes = (IsAuthenticated,)
+
+    def get_queryset(self):
+        return Reservation.objects.filter(user=self.request.user)
+
+    def get_serializer_class(self):
+        if self.action == "list":
+            return ReservationListSerializer
+
+        return ReservationSerializer
+
+    def perform_create(self, serializer):
+        serializer.save(user=self.request.user)
