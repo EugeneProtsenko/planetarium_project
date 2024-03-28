@@ -1,8 +1,5 @@
 from datetime import datetime
-
 from django.db.models import F, Count
-from django.shortcuts import render
-from pip._vendor.rich.theme import Theme
 from rest_framework import viewsets
 
 from planetarium.models import ShowTheme, PlanetariumDome, AstronomyShow, ShowSession, Reservation
