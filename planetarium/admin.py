@@ -1,3 +1,5 @@
 from django.contrib import admin
 
-# Register your models here.
+from planetarium.models import AstronomyShow
+
+admin.site.register(AstronomyShow)
