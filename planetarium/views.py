@@ -2,10 +2,11 @@ from datetime import datetime
 from django.db.models import F, Count
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import extend_schema, OpenApiParameter
-from rest_framework import viewsets, status
+from rest_framework import viewsets, status, mixins
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated, IsAdminUser
 from rest_framework.response import Response
+from rest_framework.viewsets import GenericViewSet
 
 from planetarium.models import ShowTheme, PlanetariumDome, AstronomyShow, ShowSession, Reservation
 from planetarium.permissions import IsAdminOrIfAuthenticatedReadOnly
@@ -14,19 +15,26 @@ from planetarium.serializers import ShowThemeSerializer, PlanetariumDomeSerializ
     ShowSessionDetailSerializer, ReservationSerializer, ReservationListSerializer, AstronomyShowImageSerializer
 
 
-class ShowThemeViewSet(viewsets.ModelViewSet):
+class ShowThemeViewSet(mixins.CreateModelMixin,
+    mixins.ListModelMixin,
+    GenericViewSet,):
     queryset = ShowTheme.objects.all()
     serializer_class = ShowThemeSerializer
     permission_classes = (IsAdminOrIfAuthenticatedReadOnly,)
 
 
-class PlanetariumDomeViewSet(viewsets.ModelViewSet):
+class PlanetariumDomeViewSet(mixins.CreateModelMixin,
+    mixins.ListModelMixin,
+    GenericViewSet,):
     queryset = PlanetariumDome.objects.all()
     serializer_class = PlanetariumDomeSerializer
     permission_classes = (IsAdminOrIfAuthenticatedReadOnly,)
 
 
-class AstronomyShowViewSet(viewsets.ModelViewSet):
+class AstronomyShowViewSet(mixins.ListModelMixin,
+    mixins.CreateModelMixin,
+    mixins.RetrieveModelMixin,
+    viewsets.GenericViewSet,):
     queryset = AstronomyShow.objects.prefetch_related("show_themes")
     serializer_class = AstronomyShowSerializer
     permission_classes = (IsAdminOrIfAuthenticatedReadOnly,)
@@ -158,7 +166,9 @@ class ShowSessionViewSet(viewsets.ModelViewSet):
         return super().list(request, *args, **kwargs)
 
 
-class ReservationViewSet(viewsets.ModelViewSet):
+class ReservationViewSet(mixins.ListModelMixin,
+    mixins.CreateModelMixin,
+    GenericViewSet,):
     queryset = Reservation.objects.prefetch_related(
         "tickets__show_session__astronomy_show", "tickets__show_session__planetarium_dome"
     )
