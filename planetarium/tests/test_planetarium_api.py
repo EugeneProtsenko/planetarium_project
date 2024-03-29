@@ -9,7 +9,10 @@ from rest_framework import status
 from rest_framework.test import APIClient
 
 from planetarium.models import AstronomyShow, PlanetariumDome, ShowSession, ShowTheme
-from planetarium.serializers import AstronomyShowListSerializer, AstronomyShowDetailSerializer
+from planetarium.serializers import (
+    AstronomyShowListSerializer,
+    AstronomyShowDetailSerializer,
+)
 
 ASTRONOMY_SHOW_URL = reverse("planetarium:astronomyshow-list")
 SHOW_SESSION_URL = reverse("planetarium:showsession-list")
@@ -26,7 +29,9 @@ def sample_astronomy_show(**params):
 
 
 def sample_show_session(**params):
-    planetarium_dome = PlanetariumDome.objects.create(name="Blue", rows=20, seats_in_row=20)
+    planetarium_dome = PlanetariumDome.objects.create(
+        name="Blue", rows=20, seats_in_row=20
+    )
 
     defaults = {
         "show_time": "2022-06-02 14:00:00",
@@ -75,7 +80,7 @@ class AuthenticatedAstronomyShowApiTests(TestCase):
         serializer = AstronomyShowListSerializer(astrnomy_shows, many=True)
 
         self.assertEqual(res.status_code, status.HTTP_200_OK)
-        self.assertEqual(res.data['results'], serializer.data)
+        self.assertEqual(res.data["results"], serializer.data)
 
     def test_filter_astronomy_shows_by_show_themes(self):
         show_theme1 = ShowTheme.objects.create(name="Show Theme 1")
@@ -87,17 +92,27 @@ class AuthenticatedAstronomyShowApiTests(TestCase):
         astronomy_show1.show_themes.add(show_theme1)
         astronomy_show2.show_themes.add(show_theme2)
 
-        astronomy_show3 = sample_astronomy_show(title="Astronomy show without show themes")
+        astronomy_show3 = sample_astronomy_show(
+            title="Astronomy show without show themes"
+        )
 
-        res = self.client.get(ASTRONOMY_SHOW_URL, {"show_themes": f"{show_theme1.id},{show_theme2.id}"})
+        res = self.client.get(
+            ASTRONOMY_SHOW_URL, {"show_themes": f"{show_theme1.id},{show_theme2.id}"}
+        )
 
         serializer1 = AstronomyShowListSerializer(astronomy_show1)
         serializer2 = AstronomyShowListSerializer(astronomy_show2)
         serializer3 = AstronomyShowListSerializer(astronomy_show3)
 
-        self.assertIn(str(serializer1.data), [str(item) for item in res.data["results"]])
-        self.assertIn(str(serializer2.data), [str(item) for item in res.data["results"]])
-        self.assertNotIn(str(serializer3.data), [str(item) for item in res.data["results"]])
+        self.assertIn(
+            str(serializer1.data), [str(item) for item in res.data["results"]]
+        )
+        self.assertIn(
+            str(serializer2.data), [str(item) for item in res.data["results"]]
+        )
+        self.assertNotIn(
+            str(serializer3.data), [str(item) for item in res.data["results"]]
+        )
 
     def test_filter_astronomy_shows_by_title(self):
         astronomy_shows1 = sample_astronomy_show(title="Astronomy Show")
@@ -106,14 +121,19 @@ class AuthenticatedAstronomyShowApiTests(TestCase):
 
         res = self.client.get(ASTRONOMY_SHOW_URL, {"title": "Astronomy Show"})
 
-
         serializer1 = AstronomyShowListSerializer(astronomy_shows1)
         serializer2 = AstronomyShowListSerializer(astronomy_shows2)
         serializer3 = AstronomyShowListSerializer(astronomy_shows3)
 
-        self.assertIn(str(serializer1.data), [str(item) for item in res.data["results"]])
-        self.assertIn(str(serializer2.data), [str(item) for item in res.data["results"]])
-        self.assertNotIn(str(serializer3.data), [str(item) for item in res.data["results"]])
+        self.assertIn(
+            str(serializer1.data), [str(item) for item in res.data["results"]]
+        )
+        self.assertIn(
+            str(serializer2.data), [str(item) for item in res.data["results"]]
+        )
+        self.assertNotIn(
+            str(serializer3.data), [str(item) for item in res.data["results"]]
+        )
 
     def test_retrieve_astronomy_show_detail(self):
         astronomy_show = sample_astronomy_show()
@@ -155,7 +175,6 @@ class AdminAstronomyShowApiTests(TestCase):
         astronomy_show = AstronomyShow.objects.get(id=res.data["id"])
         for key in payload.keys():
             self.assertEqual(payload[key], getattr(astronomy_show, key))
-
 
     def test_create_astronomy_show_with_show_themes(self):
         show_theme1 = ShowTheme.objects.create(name="Journey")

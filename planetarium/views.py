@@ -8,33 +8,55 @@ from rest_framework.permissions import IsAuthenticated, IsAdminUser
 from rest_framework.response import Response
 from rest_framework.viewsets import GenericViewSet
 
-from planetarium.models import ShowTheme, PlanetariumDome, AstronomyShow, ShowSession, Reservation
+from planetarium.models import (
+    ShowTheme,
+    PlanetariumDome,
+    AstronomyShow,
+    ShowSession,
+    Reservation,
+)
 from planetarium.permissions import IsAdminOrIfAuthenticatedReadOnly
-from planetarium.serializers import ShowThemeSerializer, PlanetariumDomeSerializer, AstronomyShowSerializer, \
-    AstronomyShowListSerializer, AstronomyShowDetailSerializer, ShowSessionSerializer, ShowSessionListSerializer, \
-    ShowSessionDetailSerializer, ReservationSerializer, ReservationListSerializer, AstronomyShowImageSerializer
+from planetarium.serializers import (
+    ShowThemeSerializer,
+    PlanetariumDomeSerializer,
+    AstronomyShowSerializer,
+    AstronomyShowListSerializer,
+    AstronomyShowDetailSerializer,
+    ShowSessionSerializer,
+    ShowSessionListSerializer,
+    ShowSessionDetailSerializer,
+    ReservationSerializer,
+    ReservationListSerializer,
+    AstronomyShowImageSerializer,
+)
 
 
-class ShowThemeViewSet(mixins.CreateModelMixin,
+class ShowThemeViewSet(
+    mixins.CreateModelMixin,
     mixins.ListModelMixin,
-    GenericViewSet,):
+    GenericViewSet,
+):
     queryset = ShowTheme.objects.all()
     serializer_class = ShowThemeSerializer
     permission_classes = (IsAdminOrIfAuthenticatedReadOnly,)
 
 
-class PlanetariumDomeViewSet(mixins.CreateModelMixin,
+class PlanetariumDomeViewSet(
+    mixins.CreateModelMixin,
     mixins.ListModelMixin,
-    GenericViewSet,):
+    GenericViewSet,
+):
     queryset = PlanetariumDome.objects.all()
     serializer_class = PlanetariumDomeSerializer
     permission_classes = (IsAdminOrIfAuthenticatedReadOnly,)
 
 
-class AstronomyShowViewSet(mixins.ListModelMixin,
+class AstronomyShowViewSet(
+    mixins.ListModelMixin,
     mixins.CreateModelMixin,
     mixins.RetrieveModelMixin,
-    viewsets.GenericViewSet,):
+    viewsets.GenericViewSet,
+):
     queryset = AstronomyShow.objects.prefetch_related("show_themes")
     serializer_class = AstronomyShowSerializer
     permission_classes = (IsAdminOrIfAuthenticatedReadOnly,)
@@ -113,8 +135,8 @@ class ShowSessionViewSet(viewsets.ModelViewSet):
         .select_related("astronomy_show", "planetarium_dome")
         .annotate(
             tickets_available=(
-                    F("planetarium_dome__rows") * F("planetarium_dome__seats_in_row")
-                    - Count("tickets")
+                F("planetarium_dome__rows") * F("planetarium_dome__seats_in_row")
+                - Count("tickets")
             )
         )
     )
@@ -156,8 +178,7 @@ class ShowSessionViewSet(viewsets.ModelViewSet):
                 "show_time",
                 type=OpenApiTypes.DATE,
                 description=(
-                        "Filter by datetime of ShowSession "
-                        "(ex. ?date=2022-10-23)"
+                    "Filter by datetime of ShowSession " "(ex. ?date=2022-10-23)"
                 ),
             ),
         ]
@@ -166,11 +187,14 @@ class ShowSessionViewSet(viewsets.ModelViewSet):
         return super().list(request, *args, **kwargs)
 
 
-class ReservationViewSet(mixins.ListModelMixin,
+class ReservationViewSet(
+    mixins.ListModelMixin,
     mixins.CreateModelMixin,
-    GenericViewSet,):
+    GenericViewSet,
+):
     queryset = Reservation.objects.prefetch_related(
-        "tickets__show_session__astronomy_show", "tickets__show_session__planetarium_dome"
+        "tickets__show_session__astronomy_show",
+        "tickets__show_session__planetarium_dome",
     )
     serializer_class = ReservationSerializer
     permission_classes = (IsAuthenticated,)
