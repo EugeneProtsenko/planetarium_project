@@ -1,0 +1,281 @@
+import os
+import tempfile
+
+from PIL import Image
+from django.contrib.auth import get_user_model
+from django.test import TestCase
+from django.urls import reverse
+from rest_framework import status
+from rest_framework.test import APIClient
+
+from planetarium.models import AstronomyShow, PlanetariumDome, ShowSession, ShowTheme
+from planetarium.serializers import (
+    AstronomyShowListSerializer,
+    AstronomyShowDetailSerializer,
+)
+
+ASTRONOMY_SHOW_URL = reverse("planetarium:astronomyshow-list")
+SHOW_SESSION_URL = reverse("planetarium:showsession-list")
+
+
+def sample_astronomy_show(**params):
+    defaults = {
+        "title": "Sample astronomy_show",
+        "description": "Sample description",
+    }
+    defaults.update(params)
+
+    return AstronomyShow.objects.create(**defaults)
+
+
+def sample_show_session(**params):
+    planetarium_dome = PlanetariumDome.objects.create(
+        name="Blue", rows=20, seats_in_row=20
+    )
+
+    defaults = {
+        "show_time": "2022-06-02 14:00:00",
+        "astronomy_show": None,
+        "planetarium_dome": planetarium_dome,
+    }
+    defaults.update(params)
+
+    return ShowSession.objects.create(**defaults)
+
+
+def image_upload_url(astronomy_show_id):
+    """Return URL for recipe image upload"""
+    return reverse("planetarium:astronomyshow-upload-image", args=[astronomy_show_id])
+
+
+def detail_url(astronomy_show_id):
+    return reverse("planetarium:astronomyshow-detail", args=[astronomy_show_id])
+
+
+class UnauthenticatedMovieApiTests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+
+    def test_auth_required(self):
+        res = self.client.get(ASTRONOMY_SHOW_URL)
+        self.assertEqual(res.status_code, status.HTTP_401_UNAUTHORIZED)
+
+
+class AuthenticatedAstronomyShowApiTests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.user = get_user_model().objects.create_user(
+            "test@test.com",
+            "testpass",
+        )
+        self.client.force_authenticate(self.user)
+
+    def test_list_astronomy_show(self):
+        sample_astronomy_show()
+        sample_astronomy_show()
+
+        res = self.client.get(ASTRONOMY_SHOW_URL)
+
+        astrnomy_shows = AstronomyShow.objects.order_by("id")
+        serializer = AstronomyShowListSerializer(astrnomy_shows, many=True)
+
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertEqual(res.data["results"], serializer.data)
+
+    def test_filter_astronomy_shows_by_show_themes(self):
+        show_theme1 = ShowTheme.objects.create(name="Show Theme 1")
+        show_theme2 = ShowTheme.objects.create(name="Show Theme 2")
+
+        astronomy_show1 = sample_astronomy_show(title="Astronomy Show 1")
+        astronomy_show2 = sample_astronomy_show(title="Astronomy Show 2")
+
+        astronomy_show1.show_themes.add(show_theme1)
+        astronomy_show2.show_themes.add(show_theme2)
+
+        astronomy_show3 = sample_astronomy_show(
+            title="Astronomy show without show themes"
+        )
+
+        res = self.client.get(
+            ASTRONOMY_SHOW_URL, {"show_themes": f"{show_theme1.id},{show_theme2.id}"}
+        )
+
+        serializer1 = AstronomyShowListSerializer(astronomy_show1)
+        serializer2 = AstronomyShowListSerializer(astronomy_show2)
+        serializer3 = AstronomyShowListSerializer(astronomy_show3)
+
+        self.assertIn(
+            str(serializer1.data), [str(item) for item in res.data["results"]]
+        )
+        self.assertIn(
+            str(serializer2.data), [str(item) for item in res.data["results"]]
+        )
+        self.assertNotIn(
+            str(serializer3.data), [str(item) for item in res.data["results"]]
+        )
+
+    def test_filter_astronomy_shows_by_title(self):
+        astronomy_shows1 = sample_astronomy_show(title="Astronomy Show")
+        astronomy_shows2 = sample_astronomy_show(title="Another Astronomy Show")
+        astronomy_shows3 = sample_astronomy_show(title="No match")
+
+        res = self.client.get(ASTRONOMY_SHOW_URL, {"title": "Astronomy Show"})
+
+        serializer1 = AstronomyShowListSerializer(astronomy_shows1)
+        serializer2 = AstronomyShowListSerializer(astronomy_shows2)
+        serializer3 = AstronomyShowListSerializer(astronomy_shows3)
+
+        self.assertIn(
+            str(serializer1.data), [str(item) for item in res.data["results"]]
+        )
+        self.assertIn(
+            str(serializer2.data), [str(item) for item in res.data["results"]]
+        )
+        self.assertNotIn(
+            str(serializer3.data), [str(item) for item in res.data["results"]]
+        )
+
+    def test_retrieve_astronomy_show_detail(self):
+        astronomy_show = sample_astronomy_show()
+        astronomy_show.show_themes.add(ShowTheme.objects.create(name="Show Theme"))
+
+        url = detail_url(astronomy_show.id)
+        res = self.client.get(url)
+
+        serializer = AstronomyShowDetailSerializer(astronomy_show)
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertEqual(res.data, serializer.data)
+
+    def test_create_astronomy_show_forbidden(self):
+        payload = {
+            "title": "Astronomy Show",
+            "description": "Description",
+        }
+        res = self.client.post(ASTRONOMY_SHOW_URL, payload)
+
+        self.assertEqual(res.status_code, status.HTTP_403_FORBIDDEN)
+
+
+class AdminAstronomyShowApiTests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.user = get_user_model().objects.create_user(
+            "admin@admin.com", "testpass", is_staff=True
+        )
+        self.client.force_authenticate(self.user)
+
+    def test_create_astronomy_show(self):
+        payload = {
+            "title": "Movie",
+            "description": "Description",
+        }
+        res = self.client.post(ASTRONOMY_SHOW_URL, payload)
+
+        self.assertEqual(res.status_code, status.HTTP_201_CREATED)
+        astronomy_show = AstronomyShow.objects.get(id=res.data["id"])
+        for key in payload.keys():
+            self.assertEqual(payload[key], getattr(astronomy_show, key))
+
+    def test_create_astronomy_show_with_show_themes(self):
+        show_theme1 = ShowTheme.objects.create(name="Journey")
+        show_theme2 = ShowTheme.objects.create(name="Stars")
+        payload = {
+            "title": "To infinity and beyond",
+            "show_themes": [show_theme1.id, show_theme2.id],
+            "description": "Traveling through space and time",
+        }
+        res = self.client.post(ASTRONOMY_SHOW_URL, payload)
+        self.assertEqual(res.status_code, status.HTTP_201_CREATED)
+
+        astronomy_show = AstronomyShow.objects.get(id=res.data["id"])
+        show_themes = astronomy_show.show_themes.all()
+        self.assertEqual(show_themes.count(), 2)
+        self.assertIn(show_theme1, show_themes)
+        self.assertIn(show_theme2, show_themes)
+
+
+class AstronomyShowImageUploadTests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.user = get_user_model().objects.create_superuser(
+            "admin@myproject.com", "password"
+        )
+        self.client.force_authenticate(self.user)
+        self.astronomy_show = sample_astronomy_show()
+        self.show_session = sample_show_session(astronomy_show=self.astronomy_show)
+
+    def tearDown(self):
+        self.astronomy_show.image.delete()
+
+    def test_upload_image_to_astronomy_show(self):
+        """Test uploading an image to astronomy_show"""
+        url = image_upload_url(self.astronomy_show.id)
+        with tempfile.NamedTemporaryFile(suffix=".jpg") as ntf:
+            img = Image.new("RGB", (10, 10))
+            img.save(ntf, format="JPEG")
+            ntf.seek(0)
+            res = self.client.post(url, {"image": ntf}, format="multipart")
+        self.astronomy_show.refresh_from_db()
+
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertIn("image", res.data)
+        self.assertTrue(os.path.exists(self.astronomy_show.image.path))
+
+    def test_upload_image_bad_request(self):
+        """Test uploading an invalid image"""
+        url = image_upload_url(self.astronomy_show.id)
+        res = self.client.post(url, {"image": "not image"}, format="multipart")
+
+        self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_post_image_to_astronomy_show_list_should_not_work(self):
+        url = ASTRONOMY_SHOW_URL
+        with tempfile.NamedTemporaryFile(suffix=".jpg") as ntf:
+            img = Image.new("RGB", (10, 10))
+            img.save(ntf, format="JPEG")
+            ntf.seek(0)
+            res = self.client.post(
+                url,
+                {
+                    "title": "Title",
+                    "description": "Description",
+                    "image": ntf,
+                },
+                format="multipart",
+            )
+
+        self.assertEqual(res.status_code, status.HTTP_201_CREATED)
+        astronomy_show = AstronomyShow.objects.get(title="Title")
+        self.assertFalse(astronomy_show.image)
+
+    def test_image_url_is_shown_on_astronomy_show_detail(self):
+        url = image_upload_url(self.astronomy_show.id)
+        with tempfile.NamedTemporaryFile(suffix=".jpg") as ntf:
+            img = Image.new("RGB", (10, 10))
+            img.save(ntf, format="JPEG")
+            ntf.seek(0)
+            self.client.post(url, {"image": ntf}, format="multipart")
+        res = self.client.get(detail_url(self.astronomy_show.id))
+
+        self.assertIn("image", res.data)
+
+    def test_put_astronomy_show_not_allowed(self):
+        payload = {
+            "title": "New astronomy show",
+            "description": "New description",
+        }
+
+        astronomy_show = sample_astronomy_show()
+        url = detail_url(astronomy_show.id)
+
+        res = self.client.put(url, payload)
+
+        self.assertEqual(res.status_code, status.HTTP_405_METHOD_NOT_ALLOWED)
+
+    def test_delete_astronomy_show_not_allowed(self):
+        astronomy_show = sample_astronomy_show()
+        url = detail_url(astronomy_show.id)
+
+        res = self.client.delete(url)
+
+        self.assertEqual(res.status_code, status.HTTP_405_METHOD_NOT_ALLOWED)
