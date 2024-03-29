@@ -1,8 +1,12 @@
 from datetime import datetime
 from django.db.models import F, Count
+from drf_spectacular.types import OpenApiTypes
+from drf_spectacular.utils import extend_schema, OpenApiParameter
 from rest_framework import viewsets
+from rest_framework.permissions import IsAuthenticated
 
 from planetarium.models import ShowTheme, PlanetariumDome, AstronomyShow, ShowSession, Reservation
+from planetarium.permissions import IsAdminOrIfAuthenticatedReadOnly
 from planetarium.serializers import ShowThemeSerializer, PlanetariumDomeSerializer, AstronomyShowSerializer, \
     AstronomyShowListSerializer, AstronomyShowDetailSerializer, ShowSessionSerializer, ShowSessionListSerializer, \
     ShowSessionDetailSerializer, ReservationSerializer, ReservationListSerializer
@@ -11,17 +15,19 @@ from planetarium.serializers import ShowThemeSerializer, PlanetariumDomeSerializ
 class ShowThemeViewSet(viewsets.ModelViewSet):
     queryset = ShowTheme.objects.all()
     serializer_class = ShowThemeSerializer
+    permission_classes = (IsAdminOrIfAuthenticatedReadOnly,)
 
 
 class PlanetariumDomeViewSet(viewsets.ModelViewSet):
     queryset = PlanetariumDome.objects.all()
     serializer_class = PlanetariumDomeSerializer
+    permission_classes = (IsAdminOrIfAuthenticatedReadOnly,)
 
 
 class AstronomyShowViewSet(viewsets.ModelViewSet):
     queryset = AstronomyShow.objects.prefetch_related("show_themes")
     serializer_class = AstronomyShowSerializer
-    # permission_classes = (IsAdminOrIfAuthenticatedReadOnly,)
+    permission_classes = (IsAdminOrIfAuthenticatedReadOnly,)
 
     @staticmethod
     def _params_to_ints(qs):
@@ -56,6 +62,23 @@ class AstronomyShowViewSet(viewsets.ModelViewSet):
 
         return AstronomyShowSerializer
 
+    @extend_schema(
+        parameters=[
+            OpenApiParameter(
+                "show_themes",
+                type={"type": "list", "items": {"type": "number"}},
+                description="Filter by show_themes id (ex. ?show_themes=1,4)",
+            ),
+            OpenApiParameter(
+                "title",
+                type=OpenApiTypes.STR,
+                description="Filter by movie title (ex. ?title=stars)",
+            ),
+        ]
+    )
+    def list(self, request, *args, **kwargs):
+        return super().list(request, *args, **kwargs)
+
 
 class ShowSessionViewSet(viewsets.ModelViewSet):
     queryset = (
@@ -69,7 +92,7 @@ class ShowSessionViewSet(viewsets.ModelViewSet):
         )
     )
     serializer_class = ShowSessionSerializer
-    # permission_classes = (IsAdminOrIfAuthenticatedReadOnly,)
+    permission_classes = (IsAdminOrIfAuthenticatedReadOnly,)
 
     def get_queryset(self):
         date = self.request.query_params.get("date")
@@ -95,14 +118,33 @@ class ShowSessionViewSet(viewsets.ModelViewSet):
 
         return ShowSessionSerializer
 
+    @extend_schema(
+        parameters=[
+            OpenApiParameter(
+                "astronomy_show",
+                type=OpenApiTypes.INT,
+                description="Filter by astronomy_show id (ex. ?astronomy_show=2)",
+            ),
+            OpenApiParameter(
+                "show_time",
+                type=OpenApiTypes.DATE,
+                description=(
+                        "Filter by datetime of ShowSession "
+                        "(ex. ?date=2022-10-23)"
+                ),
+            ),
+        ]
+    )
+    def list(self, request, *args, **kwargs):
+        return super().list(request, *args, **kwargs)
+
 
 class ReservationViewSet(viewsets.ModelViewSet):
     queryset = Reservation.objects.prefetch_related(
         "tickets__show_session__astronomy_show", "tickets__show_session__planetarium_dome"
     )
     serializer_class = ReservationSerializer
-    # pagination_class = OrderPagination
-    # permission_classes = (IsAuthenticated,)
+    permission_classes = (IsAuthenticated,)
 
     def get_queryset(self):
         return Reservation.objects.filter(user=self.request.user)
